@@ -183,3 +183,6 @@ MIT License - Feel free to use this server for your own projects and application
 ---
 
 **Built with ❤️ for the Hyperliquid trading community**
+
+## Last Updated
+Tue Jul 15 05:09:24 PM IDT 2025
