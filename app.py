@@ -377,8 +377,76 @@ def create_gradio_interface():
 # Create the Gradio interface
 demo = create_gradio_interface()
 
-# Launch Gradio with MCP API endpoints
+# Create Flask app for MCP API endpoints
+app = Flask(__name__)
+CORS(app)
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({"status": "healthy", "service": "hyperliquid-mcp-server"})
+
+@app.route('/mcp/tools', methods=['GET'])
+def list_tools():
+    """List all available MCP tools"""
+    return jsonify({"tools": TOOLS})
+
+@app.route('/mcp/call', methods=['POST'])
+def call_tool():
+    """Execute an MCP tool"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON data provided"}), 400
+        
+        tool_name = data.get('tool')
+        arguments = data.get('arguments', {})
+        
+        if not tool_name:
+            return jsonify({"error": "Tool name is required"}), 400
+        
+        # Map tool names to functions
+        tool_functions = {
+            "get_all_mids": get_all_mids,
+            "get_user_state": lambda: get_user_state(arguments.get("address")),
+            "get_recent_trades": lambda: get_recent_trades(
+                arguments.get("coin"),
+                arguments.get("n", 100)
+            ),
+            "get_l2_snapshot": lambda: get_l2_snapshot(arguments.get("coin")),
+            "get_candles": lambda: get_candles(
+                arguments.get("coin"),
+                arguments.get("interval", "1h"),
+                arguments.get("limit", 500)
+            ),
+            "get_meta": get_meta,
+            "get_funding_rates": lambda: get_funding_rates(arguments.get("coin")),
+            "get_open_interest": lambda: get_open_interest(arguments.get("coin"))
+        }
+        
+        if tool_name not in tool_functions:
+            return jsonify({"error": f"Unknown tool: {tool_name}"}), 400
+        
+        # Execute the tool
+        result = tool_functions[tool_name]()
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Launch both Gradio and Flask
 if __name__ == '__main__':
+    import threading
+    
+    # Start Flask in a separate thread
+    def run_flask():
+        app.run(host='0.0.0.0', port=3001, debug=False)
+    
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
+    
+    # Start Gradio
     demo.launch(
         server_name="0.0.0.0",
         server_port=7860,

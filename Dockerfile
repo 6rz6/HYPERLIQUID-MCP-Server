@@ -26,8 +26,8 @@ COPY . .
 RUN chmod -R 755 /app
 RUN chmod -R 777 /tmp/matplotlib
 
-# Expose port
-EXPOSE 7860
+# Expose ports
+EXPOSE 7860 3001
 
 # Run the application
 CMD ["python", "app.py"]
