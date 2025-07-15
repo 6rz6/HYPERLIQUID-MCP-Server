@@ -1,13 +1,13 @@
 import json
 import requests
 import gradio as gr
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime
-import threading
+import os
 
 # Hyperliquid API base URL
 HYPERLIQUID_API = "https://api.hyperliquid.xyz/info"
@@ -359,7 +359,7 @@ def create_gradio_interface():
                 outputs=[funding_output]
             )
         
-        # Add MCP API endpoints as hidden tabs
+        # Add MCP API documentation
         with gr.Tab("🔧 MCP API"):
             gr.Markdown("## MCP Server API Endpoints")
             gr.Markdown("""
@@ -376,67 +376,6 @@ def create_gradio_interface():
 
 # Create the Gradio interface
 demo = create_gradio_interface()
-
-# Create Flask app for MCP API endpoints
-app = Flask(__name__)
-CORS(app)
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    """Health check endpoint"""
-    return jsonify({"status": "healthy", "service": "hyperliquid-mcp-server"})
-
-@app.route('/mcp/tools', methods=['GET'])
-def list_tools():
-    """List all available MCP tools"""
-    return jsonify({"tools": TOOLS})
-
-@app.route('/mcp/call', methods=['POST'])
-def call_tool():
-    """Execute an MCP tool"""
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
-        
-        tool_name = data.get('tool')
-        arguments = data.get('arguments', {})
-        
-        if not tool_name:
-            return jsonify({"error": "Tool name is required"}), 400
-        
-        # Map tool names to functions
-        tool_functions = {
-            "get_all_mids": get_all_mids,
-            "get_user_state": lambda: get_user_state(arguments.get("address")),
-            "get_recent_trades": lambda: get_recent_trades(
-                arguments.get("coin"),
-                arguments.get("n", 100)
-            ),
-            "get_l2_snapshot": lambda: get_l2_snapshot(arguments.get("coin")),
-            "get_candles": lambda: get_candles(
-                arguments.get("coin"),
-                arguments.get("interval", "1h"),
-                arguments.get("limit", 500)
-            ),
-            "get_meta": get_meta,
-            "get_funding_rates": lambda: get_funding_rates(arguments.get("coin")),
-            "get_open_interest": lambda: get_open_interest(arguments.get("coin"))
-        }
-        
-        if tool_name not in tool_functions:
-            return jsonify({"error": f"Unknown tool: {tool_name}"}), 400
-        
-        # Execute the tool
-        result = tool_functions[tool_name]()
-        return jsonify(result)
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# Add MCP endpoints using Gradio's FastAPI app
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
 
 # Add MCP endpoints to Gradio's FastAPI app
 @demo.app.get("/health")
@@ -488,11 +427,11 @@ async def call_tool(request_data: dict):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
-# Launch Gradio with MCP API endpoints
+# Launch configuration for Hugging Face Spaces
 if __name__ == '__main__':
     demo.launch(
         server_name="0.0.0.0",
-        server_port=7860,
+        server_port=int(os.getenv("PORT", 7860)),
         share=False,
         quiet=False,
         show_error=True,
