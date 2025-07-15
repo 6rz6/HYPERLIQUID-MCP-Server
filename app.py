@@ -477,4 +477,4 @@ app = gr.mount_gradio_app(app, demo, path="/ui")
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 7860))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    uvicorn.run(app, host="0.0.0.0", port=port)# Trigger rebuild - Tue Jul 15 04:57:04 PM IDT 2025
