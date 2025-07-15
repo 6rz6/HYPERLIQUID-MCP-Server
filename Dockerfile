@@ -30,4 +30,4 @@ RUN chmod -R 777 /tmp/matplotlib
 EXPOSE 7860 3001
 
 # Run the application
-CMD ["python", "app.py"]
+CMD ["python", "-m", "uvicorn", "app:mcp_app", "--host", "0.0.0.0", "--port", "7860"]
