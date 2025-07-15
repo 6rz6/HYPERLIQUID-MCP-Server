@@ -224,33 +224,23 @@ async def call_tool(request: ToolCallRequest):
         tool_name = request.tool_name
         args = request.arguments
         
-        # Map tool names to functions
         tool_functions = {
             "get_all_mids": get_all_mids,
             "get_user_state": lambda: get_user_state(args.get("address")),
-            "get_recent_trades": lambda: get_recent_trades(
-                args.get("coin"),
-                args.get("n", 100)
-            ),
+            "get_recent_trades": lambda: get_recent_trades(args.get("coin"), args.get("n", 100)),
             "get_l2_snapshot": lambda: get_l2_snapshot(args.get("coin")),
-            "get_candles": lambda: get_candles(
-                args.get("coin"),
-                args.get("interval", "1h"),
-                args.get("limit", 500)
-            ),
+            "get_candles": lambda: get_candles(args.get("coin"), args.get("interval", "1h"), args.get("limit", 500)),
             "get_meta": get_meta,
             "get_funding_rates": lambda: get_funding_rates(args.get("coin")),
             "get_open_interest": lambda: get_open_interest(args.get("coin"))
         }
         
-        if tool_name not in tool_functions:
-            raise HTTPException(status_code=400, detail=f"Unknown tool: {tool_name}")
-        
-        result = tool_functions[tool_name]()
-        return result
-        
+        if tool_name in tool_functions:
+            return tool_functions[tool_name]()
+        else:
+            return {"error": f"Unknown tool: {tool_name}"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"error": str(e)}
 
 # Gradio UI functions
 def get_all_prices_ui():
@@ -258,9 +248,10 @@ def get_all_prices_ui():
     result = get_all_mids()
     if result["success"]:
         data = result["data"]
-        df = pd.DataFrame(list(data.items()), columns=["Symbol", "Price"])
-        return df
-    return pd.DataFrame([["Error", result["error"]]], columns=["Symbol", "Price"])
+        if isinstance(data, dict):
+            df = pd.DataFrame(list(data.items()), columns=["Symbol", "Price"])
+            return df
+    return pd.DataFrame([["No data available", ""]], columns=["Symbol", "Price"])
 
 def get_recent_trades_ui(coin, n=50):
     """Get recent trades for UI"""
@@ -269,8 +260,8 @@ def get_recent_trades_ui(coin, n=50):
         trades = result["data"]
         if trades:
             df = pd.DataFrame(trades)
-            return df, f"Found {len(trades)} trades for {coin}"
-    return pd.DataFrame(), f"No trades found for {coin}"
+            return df, f"Loaded {len(trades)} trades for {coin}"
+    return pd.DataFrame([["No trades found", "", ""]], columns=["Time", "Price", "Size"]), f"No trades found for {coin}"
 
 def get_candles_ui(coin, interval="1h", limit=100):
     """Get candlestick data for UI"""
@@ -278,17 +269,15 @@ def get_candles_ui(coin, interval="1h", limit=100):
     if result["success"]:
         candles = result["data"]
         if candles:
-            df = pd.DataFrame(candles, columns=[
-                "timestamp", "open", "high", "low", "close", "volume"
-            ])
-            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+            df = pd.DataFrame(candles, columns=["Time", "Open", "High", "Low", "Close", "Volume"])
+            df["Time"] = pd.to_datetime(df["Time"], unit="ms")
             
             fig = go.Figure(data=[go.Candlestick(
-                x=df["timestamp"],
-                open=df["open"],
-                high=df["high"],
-                low=df["low"],
-                close=df["close"],
+                x=df["Time"],
+                open=df["Open"],
+                high=df["High"],
+                low=df["Low"],
+                close=df["Close"],
                 name=coin
             )])
             fig.update_layout(
@@ -297,8 +286,8 @@ def get_candles_ui(coin, interval="1h", limit=100):
                 yaxis_title="Price",
                 template="plotly_white"
             )
-            return fig, f"Loaded {len(df)} candles for {coin}"
-    return go.Figure(), f"No data found for {coin}"
+            return fig, f"Loaded {len(candles)} candles for {coin}"
+    return go.Figure(), f"Could not load candles for {coin}"
 
 def get_orderbook_ui(coin):
     """Get order book for UI"""
@@ -307,36 +296,37 @@ def get_orderbook_ui(coin):
         data = result["data"]
         if data and "levels" in data:
             levels = data["levels"]
-            bids = levels[0] if len(levels) > 0 else []
-            asks = levels[1] if len(levels) > 1 else []
-            
-            bid_prices = [float(b[0]) for b in bids[:20]]
-            bid_sizes = [float(b[1]) for b in bids[:20]]
-            ask_prices = [float(a[0]) for a in asks[:20]]
-            ask_sizes = [float(a[1]) for a in asks[:20]]
-            
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=bid_prices,
-                y=bid_sizes,
-                name="Bids",
-                marker_color="green",
-                orientation="v"
-            ))
-            fig.add_trace(go.Bar(
-                x=ask_prices,
-                y=ask_sizes,
-                name="Asks",
-                marker_color="red",
-                orientation="v"
-            ))
-            fig.update_layout(
-                title=f"{coin} Order Book",
-                xaxis_title="Price",
-                yaxis_title="Size",
-                template="plotly_white"
-            )
-            return fig, f"Order book loaded for {coin}"
+            if levels:
+                bids = levels[0]
+                asks = levels[1]
+                
+                bid_prices = [float(b[0]) for b in bids]
+                bid_sizes = [float(b[1]) for b in bids]
+                ask_prices = [float(a[0]) for a in asks]
+                ask_sizes = [float(a[1]) for a in asks]
+                
+                fig = go.Figure()
+                fig.add_trace(go.Bar(
+                    x=bid_prices,
+                    y=bid_sizes,
+                    name="Bids",
+                    marker_color="green",
+                    orientation="v"
+                ))
+                fig.add_trace(go.Bar(
+                    x=ask_prices,
+                    y=ask_sizes,
+                    name="Asks",
+                    marker_color="red",
+                    orientation="v"
+                ))
+                fig.update_layout(
+                    title=f"{coin} Order Book",
+                    xaxis_title="Price",
+                    yaxis_title="Size",
+                    template="plotly_white"
+                )
+                return fig, f"Order book loaded for {coin}"
     return go.Figure(), f"Could not load order book for {coin}"
 
 def get_funding_rates_ui(coin=None):
@@ -482,8 +472,8 @@ def call_tool_sync(tool_name, arguments_str):
     except Exception as e:
         return {"error": str(e)}
 
-# Mount Gradio app to FastAPI
-app = gr.mount_gradio_app(app, demo, path="/")
+# Mount Gradio app to FastAPI at /ui path
+app = gr.mount_gradio_app(app, demo, path="/ui")
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 7860))
