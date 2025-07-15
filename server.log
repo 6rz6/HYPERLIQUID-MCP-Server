@@ -1,0 +1,8 @@
+
+> hyperliquid-mcp-server@1.0.0 start
+> node build/index.js
+
+🚀 Hyperliquid MCP server running on port 3001
+📊 Health check: http://localhost:3001/health
+🔧 Tools endpoint: http://localhost:3001/mcp/tools
+⚡ Call endpoint: http://localhost:3001/mcp/call
