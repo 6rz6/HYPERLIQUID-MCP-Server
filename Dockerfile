@@ -18,5 +18,5 @@ COPY . .
 # Expose port
 EXPOSE 7860
 
-# Run the application
-CMD ["python", "app.py"]
+# Run the application with uvicorn for FastAPI
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]
