@@ -171,4 +171,4 @@ MIT License - Feel free to use this server for your own projects and application
 
 ---
 
-**Built with ❤️ for the Hyperliquid trading community**
+**Built by rz with ❤️ for the Hyperliquid trading community**
