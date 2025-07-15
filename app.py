@@ -377,33 +377,18 @@ def create_gradio_interface():
 # Create the Gradio interface
 demo = create_gradio_interface()
 
-# Create FastAPI app and mount Gradio
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-# Create FastAPI app
-app = FastAPI(title="Hyperliquid MCP Server", version="1.0.0")
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.get("/health")
+# Add MCP endpoints to Gradio's FastAPI app
+@demo.app.get("/health")
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "hyperliquid-mcp-server"}
 
-@app.get("/mcp/tools")
+@demo.app.get("/mcp/tools")
 async def list_tools():
     """List all available MCP tools"""
     return {"tools": TOOLS}
 
-@app.post("/mcp/call")
+@demo.app.post("/mcp/call")
 async def call_tool(request_data: dict):
     """Execute an MCP tool"""
     try:
@@ -442,11 +427,13 @@ async def call_tool(request_data: dict):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
-# Mount Gradio app to FastAPI
-app = gr.mount_gradio_app(app, demo, path="/")
-
 # Launch configuration for Hugging Face Spaces
 if __name__ == '__main__':
-    import uvicorn
-    port = int(os.getenv("PORT", 7860))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=int(os.getenv("PORT", 7860)),
+        share=False,
+        quiet=False,
+        show_error=True,
+        debug=False
+    )
