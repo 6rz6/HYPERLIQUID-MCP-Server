@@ -443,8 +443,61 @@ async def call_tool(request_data: dict):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
-# Launch configuration for Hugging Face Spaces
+# Mount FastAPI app to Gradio for MCP endpoints
+demo.queue()
+app = demo.app
+
+# Add MCP endpoints to the Gradio app
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy", "service": "hyperliquid-mcp-server"}
+
+@app.get("/mcp/tools")
+async def list_tools():
+    """List all available MCP tools"""
+    return {"tools": TOOLS}
+
+@app.post("/mcp/call")
+async def call_tool(request_data: dict):
+    """Execute an MCP tool"""
+    try:
+        tool_name = request_data.get('tool')
+        arguments = request_data.get('arguments', {})
+        
+        if not tool_name:
+            return JSONResponse({"error": "Tool name is required"}, status_code=400)
+        
+        # Map tool names to functions
+        tool_functions = {
+            "get_all_mids": get_all_mids,
+            "get_user_state": lambda: get_user_state(arguments.get("address")),
+            "get_recent_trades": lambda: get_recent_trades(
+                arguments.get("coin"),
+                arguments.get("n", 100)
+            ),
+            "get_l2_snapshot": lambda: get_l2_snapshot(arguments.get("coin")),
+            "get_candles": lambda: get_candles(
+                arguments.get("coin"),
+                arguments.get("interval", "1h"),
+                arguments.get("limit", 500)
+            ),
+            "get_meta": get_meta,
+            "get_funding_rates": lambda: get_funding_rates(arguments.get("coin")),
+            "get_open_interest": lambda: get_open_interest(arguments.get("coin"))
+        }
+        
+        if tool_name not in tool_functions:
+            return JSONResponse({"error": f"Unknown tool: {tool_name}"}, status_code=400)
+        
+        # Execute the tool
+        result = tool_functions[tool_name]()
+        return result
+        
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+# For Hugging Face Spaces - use Gradio as main interface
 if __name__ == '__main__':
-    import uvicorn
-    port = int(os.getenv("PORT", 7860))
-    uvicorn.run(mcp_app, host="0.0.0.0", port=port)
+    demo.queue()
+    demo.launch(server_name="0.0.0.0", server_port=int(os.getenv("PORT", 7860)))
