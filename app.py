@@ -377,73 +377,7 @@ def create_gradio_interface():
 # Create the Gradio interface
 demo = create_gradio_interface()
 
-# Create a separate FastAPI app for MCP endpoints
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
-
-# Create FastAPI app for MCP
-mcp_app = FastAPI(title="Hyperliquid MCP Server", version="1.0.0")
-
-# Add CORS middleware
-mcp_app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@mcp_app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "service": "hyperliquid-mcp-server"}
-
-@mcp_app.get("/mcp/tools")
-async def list_tools():
-    """List all available MCP tools"""
-    return {"tools": TOOLS}
-
-@mcp_app.post("/mcp/call")
-async def call_tool(request_data: dict):
-    """Execute an MCP tool"""
-    try:
-        tool_name = request_data.get('tool')
-        arguments = request_data.get('arguments', {})
-        
-        if not tool_name:
-            return JSONResponse({"error": "Tool name is required"}, status_code=400)
-        
-        # Map tool names to functions
-        tool_functions = {
-            "get_all_mids": get_all_mids,
-            "get_user_state": lambda: get_user_state(arguments.get("address")),
-            "get_recent_trades": lambda: get_recent_trades(
-                arguments.get("coin"),
-                arguments.get("n", 100)
-            ),
-            "get_l2_snapshot": lambda: get_l2_snapshot(arguments.get("coin")),
-            "get_candles": lambda: get_candles(
-                arguments.get("coin"),
-                arguments.get("interval", "1h"),
-                arguments.get("limit", 500)
-            ),
-            "get_meta": get_meta,
-            "get_funding_rates": lambda: get_funding_rates(arguments.get("coin")),
-            "get_open_interest": lambda: get_open_interest(arguments.get("coin"))
-        }
-        
-        if tool_name not in tool_functions:
-            return JSONResponse({"error": f"Unknown tool: {tool_name}"}, status_code=400)
-        
-        # Execute the tool
-        result = tool_functions[tool_name]()
-        return result
-        
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-# Mount FastAPI app to Gradio for MCP endpoints
+# Mount MCP endpoints to the Gradio app
 demo.queue()
 app = demo.app
 
