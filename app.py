@@ -1,11 +1,8 @@
 import json
 import requests
 import gradio as gr
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
 from datetime import datetime
 import os
 
@@ -293,18 +290,63 @@ def get_funding_rates_ui(coin):
             return df
     return pd.DataFrame()
 
-# Create Gradio interface
-def create_gradio_interface():
-    with gr.Blocks(title="Hyperliquid Trading Dashboard", theme=gr.themes.Soft()) as demo:
-        gr.Markdown("# 📊 Hyperliquid Trading Dashboard")
-        gr.Markdown("Real-time trading data from Hyperliquid decentralized exchange")
+# MCP API functions
+def mcp_health():
+    """Health check endpoint for MCP"""
+    return {"status": "healthy", "service": "hyperliquid-mcp-server"}
+
+def mcp_list_tools():
+    """List all available MCP tools"""
+    return {"tools": TOOLS}
+
+def mcp_call_tool(tool_name: str, arguments: str = "{}"):
+    """Execute an MCP tool"""
+    try:
+        args = json.loads(arguments) if arguments else {}
         
+        # Map tool names to functions
+        tool_functions = {
+            "get_all_mids": get_all_mids,
+            "get_user_state": lambda: get_user_state(args.get("address")),
+            "get_recent_trades": lambda: get_recent_trades(
+                args.get("coin"),
+                args.get("n", 100)
+            ),
+            "get_l2_snapshot": lambda: get_l2_snapshot(args.get("coin")),
+            "get_candles": lambda: get_candles(
+                args.get("coin"),
+                args.get("interval", "1h"),
+                args.get("limit", 500)
+            ),
+            "get_meta": get_meta,
+            "get_funding_rates": lambda: get_funding_rates(args.get("coin")),
+            "get_open_interest": lambda: get_open_interest(args.get("coin"))
+        }
+        
+        if tool_name not in tool_functions:
+            return {"error": f"Unknown tool: {tool_name}"}
+        
+        # Execute the tool
+        result = tool_functions[tool_name]()
+        return result
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+# Create Gradio interface
+with gr.Blocks(title="Hyperliquid Trading Dashboard", theme=gr.themes.Soft()) as demo:
+    gr.Markdown("# 📊 Hyperliquid Trading Dashboard")
+    gr.Markdown("Real-time trading data from Hyperliquid decentralized exchange")
+    
+    with gr.Tabs():
+        # Market Prices Tab
         with gr.Tab("📈 Market Prices"):
             with gr.Row():
                 get_prices_btn = gr.Button("Get All Market Prices", variant="primary")
             prices_output = gr.Dataframe(headers=["Symbol", "Price"], interactive=False)
             get_prices_btn.click(get_all_prices_ui, outputs=prices_output)
         
+        # Recent Trades Tab
         with gr.Tab("💱 Recent Trades"):
             with gr.Row():
                 coin_input = gr.Textbox(label="Coin Symbol", placeholder="BTC")
@@ -318,6 +360,7 @@ def create_gradio_interface():
                 outputs=[trades_output, trades_status]
             )
         
+        # Candlestick Charts Tab
         with gr.Tab("📊 Candlestick Charts"):
             with gr.Row():
                 candle_coin = gr.Textbox(label="Coin Symbol", placeholder="BTC")
@@ -336,6 +379,7 @@ def create_gradio_interface():
                 outputs=[candle_chart, candle_status]
             )
         
+        # Order Book Tab
         with gr.Tab("📋 Order Book"):
             with gr.Row():
                 orderbook_coin = gr.Textbox(label="Coin Symbol", placeholder="BTC")
@@ -348,6 +392,7 @@ def create_gradio_interface():
                 outputs=[orderbook_chart, orderbook_status]
             )
         
+        # Funding Rates Tab
         with gr.Tab("💰 Funding Rates"):
             with gr.Row():
                 funding_coin = gr.Textbox(label="Coin Symbol (optional)", placeholder="BTC")
@@ -359,100 +404,46 @@ def create_gradio_interface():
                 outputs=[funding_output]
             )
         
-        # Add MCP API documentation
+        # MCP API Tab
         with gr.Tab("🔧 MCP API"):
             gr.Markdown("## MCP Server API Endpoints")
-            gr.Markdown("""
-            This dashboard also provides MCP (Model Context Protocol) endpoints:
+            gr.Markdown("This dashboard provides MCP (Model Context Protocol) endpoints for AI integration:")
             
-            - **Health Check**: `/health`
-            - **List Tools**: `/mcp/tools`
-            - **Call Tool**: `/mcp/call`
-            
-            Use these endpoints to integrate with AI assistants and automated trading systems.
-            """)
-    
-    return demo
+            with gr.Row():
+                with gr.Column():
+                    gr.Markdown("### Available Tools")
+                    tools_display = gr.JSON(value=TOOLS, label="MCP Tools")
+                    
+                    gr.Markdown("### Test MCP Tools")
+                    tool_name = gr.Dropdown(
+                        choices=[tool["name"] for tool in TOOLS],
+                        label="Select Tool",
+                        value="get_all_mids"
+                    )
+                    arguments = gr.Textbox(
+                        label="Arguments (JSON format)",
+                        placeholder='{"coin": "BTC"}',
+                        value="{}"
+                    )
+                    call_btn = gr.Button("Call Tool", variant="primary")
+                    result_display = gr.JSON(label="Result")
+                    
+                    call_btn.click(
+                        fn=mcp_call_tool,
+                        inputs=[tool_name, arguments],
+                        outputs=result_display
+                    )
+                    
+                    gr.Markdown("### API Endpoints")
+                    gr.Markdown("""
+                    - **Health Check**: `GET /health`
+                    - **List Tools**: `GET /mcp/tools`
+                    - **Call Tool**: `POST /mcp/call`
+                    
+                    Use these endpoints to integrate with AI assistants and automated trading systems.
+                    """)
 
-# Create the Gradio interface
-demo = create_gradio_interface()
-
-# Create Gradio app with MCP API endpoints
-import gradio as gr
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-
-# Create FastAPI app for MCP endpoints
-mcp_app = FastAPI(title="Hyperliquid MCP Server", version="1.0.0")
-
-# Add CORS middleware
-mcp_app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# MCP endpoints
-@mcp_app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "service": "hyperliquid-mcp-server"}
-
-@mcp_app.get("/mcp/tools")
-async def list_tools():
-    """List all available MCP tools"""
-    return {"tools": TOOLS}
-
-@mcp_app.post("/mcp/call")
-async def call_tool(request_data: dict):
-    """Execute an MCP tool"""
-    try:
-        tool_name = request_data.get('tool')
-        arguments = request_data.get('arguments', {})
-        
-        if not tool_name:
-            return JSONResponse({"error": "Tool name is required"}, status_code=400)
-        
-        # Map tool names to functions
-        tool_functions = {
-            "get_all_mids": get_all_mids,
-            "get_user_state": lambda: get_user_state(arguments.get("address")),
-            "get_recent_trades": lambda: get_recent_trades(
-                arguments.get("coin"),
-                arguments.get("n", 100)
-            ),
-            "get_l2_snapshot": lambda: get_l2_snapshot(arguments.get("coin")),
-            "get_candles": lambda: get_candles(
-                arguments.get("coin"),
-                arguments.get("interval", "1h"),
-                arguments.get("limit", 500)
-            ),
-            "get_meta": get_meta,
-            "get_funding_rates": lambda: get_funding_rates(arguments.get("coin")),
-            "get_open_interest": lambda: get_open_interest(arguments.get("coin"))
-        }
-        
-        if tool_name not in tool_functions:
-            return JSONResponse({"error": f"Unknown tool: {tool_name}"}, status_code=400)
-        
-        # Execute the tool
-        result = tool_functions[tool_name]()
-        return result
-        
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-# Mount MCP endpoints to the Gradio app
-demo.queue()
-app = demo.app
-
-# Add MCP endpoints to the Gradio app
-app.mount("/mcp", mcp_app)
-
-# For Hugging Face Spaces - use Gradio as main interface
+# For Hugging Face Spaces
 if __name__ == '__main__':
     demo.queue()
     demo.launch(server_name="0.0.0.0", server_port=int(os.getenv("PORT", 7860)))
