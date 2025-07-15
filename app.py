@@ -434,24 +434,22 @@ def call_tool():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Import FastAPI for MCP endpoints
+# Add MCP endpoints using Gradio's FastAPI app
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-# Create a FastAPI app for MCP endpoints
-mcp_app = FastAPI()
-
-@mcp_app.get("/health")
+# Add MCP endpoints to Gradio's FastAPI app
+@demo.app.get("/health")
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "hyperliquid-mcp-server"}
 
-@mcp_app.get("/mcp/tools")
+@demo.app.get("/mcp/tools")
 async def list_tools():
     """List all available MCP tools"""
     return {"tools": TOOLS}
 
-@mcp_app.post("/mcp/call")
+@demo.app.post("/mcp/call")
 async def call_tool(request_data: dict):
     """Execute an MCP tool"""
     try:
@@ -489,9 +487,6 @@ async def call_tool(request_data: dict):
         
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
-
-# Mount the MCP app to Gradio's FastAPI app
-demo.app.mount("/api", mcp_app)
 
 # Launch Gradio with MCP API endpoints
 if __name__ == '__main__':
